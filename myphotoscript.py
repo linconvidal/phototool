@@ -27,6 +27,9 @@ from rich.text import Text
 # Initialize rich console
 console = Console()
 
+# Define global constants
+SIDECAR_EXTENSIONS = [".xmp", ".raf", ".fp2", ".fp3", ".photo-edit", ".dng"]
+
 # -----------------------------------------
 # 1. EXIF Functions
 # -----------------------------------------
@@ -164,13 +167,7 @@ def move_file_and_sidecars(
     Returns tuple: (success, copied_sidecars_count, already_exists)
     """
     if sidecar_exts is None:
-        sidecar_exts = [
-            ".xmp",
-            ".raf",
-            ".fp2",
-            ".fp3",
-            ".dng",
-        ]  # Add any sidecars you expect
+        sidecar_exts = SIDECAR_EXTENSIONS
 
     base_name = src_file.stem  # e.g. "DSCF001" from "DSCF001.RAF"
     src_parent = src_file.parent
@@ -342,8 +339,8 @@ def import_from_sd(sd_folder, ssd_root, skip_mov=False, verbose=False, max_worke
         )
         return
 
-    # Define sidecar extensions to recognize
-    sidecar_exts = [".xmp", ".raf", ".fp2", ".fp3"]
+    # Use the global sidecar extensions list
+    sidecar_exts = SIDECAR_EXTENSIONS
 
     # Use try-except for the initial file scan
     try:
