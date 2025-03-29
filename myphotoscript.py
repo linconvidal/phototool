@@ -28,7 +28,41 @@ from rich.text import Text
 console = Console()
 
 # Define global constants
-SIDECAR_EXTENSIONS = [".xmp", ".raf", ".fp2", ".fp3", ".photo-edit", ".dng"]
+# Main photo file extensions (RAW and common formats)
+PHOTO_EXTENSIONS = [
+    ".raf",  # Fujifilm RAW
+    ".cr2",
+    ".cr3",  # Canon RAW
+    ".nef",  # Nikon RAW
+    ".arw",  # Sony RAW
+    ".dng",  # Digital Negative (Adobe)
+    ".rw2",  # Panasonic RAW
+    ".orf",  # Olympus RAW
+    ".pef",  # Pentax RAW
+    ".srw",  # Samsung RAW
+    ".jpg",
+    ".jpeg",  # JPEG
+    ".heic",  # Apple HEIC
+    ".png",  # PNG
+    ".tif",
+    ".tiff",  # TIFF
+]
+
+# Video file extensions
+VIDEO_EXTENSIONS = [
+    ".mov",  # QuickTime
+    ".mp4",  # MPEG-4
+    ".avi",  # AVI
+    ".m4v",  # Apple Video
+]
+
+# Sidecar file extensions (metadata, edits, etc.)
+SIDECAR_EXTENSIONS = [
+    ".xmp",  # Adobe XMP sidecar
+    ".photo-edit",  # Photo editing data
+    ".fp2",
+    ".fp3",  # Other sidecar formats
+]
 
 # -----------------------------------------
 # 1. EXIF Functions
@@ -310,7 +344,7 @@ def import_from_sd(sd_folder, ssd_root, skip_mov=False, verbose=False, max_worke
     """
     Organize photos by YYYY.MM in ssd_root from sd_folder.
     Recursively scans all subdirectories.
-    Optionally skip .mov files.
+    Optionally skip video files.
     Uses parallel processing for faster copying.
     """
     sd_folder = Path(sd_folder)
@@ -339,9 +373,6 @@ def import_from_sd(sd_folder, ssd_root, skip_mov=False, verbose=False, max_worke
         )
         return
 
-    # Use the global sidecar extensions list
-    sidecar_exts = SIDECAR_EXTENSIONS
-
     # Use try-except for the initial file scan
     try:
         console.print("\n")  # Add spacing before scan message
@@ -360,9 +391,19 @@ def import_from_sd(sd_folder, ssd_root, skip_mov=False, verbose=False, max_worke
             console.print("[bold red]ERROR[/] The SD card appears to be disconnected.")
         return
 
-    # Filter out sidecar files from main processing
+    # Identify main files to process - photos and optionally videos
+    main_extensions = PHOTO_EXTENSIONS.copy()
+    if not skip_mov:
+        main_extensions.extend(VIDEO_EXTENSIONS)
+
+    # Get all file extensions in lowercase for case-insensitive comparison
+    main_extensions_lower = [ext.lower() for ext in main_extensions]
+
+    # Filter main files to process
     files = [
-        f for f in all_files if f.is_file() and f.suffix.lower() not in sidecar_exts
+        f
+        for f in all_files
+        if f.is_file() and f.suffix.lower() in main_extensions_lower
     ]
 
     # Count metrics
@@ -417,13 +458,15 @@ def import_from_sd(sd_folder, ssd_root, skip_mov=False, verbose=False, max_worke
                 progress.update(task_id, advance=1)
                 return
 
-            # Optionally skip .mov
-            if skip_mov and file_item.suffix.lower() == ".mov":
+            # Skip videos if requested
+            if skip_mov and file_item.suffix.lower() in [
+                ext.lower() for ext in VIDEO_EXTENSIONS
+            ]:
                 if verbose:
-                    console.print(f"[yellow]SKIP[/] {file_item.name} (.mov file)")
+                    console.print(f"[yellow]SKIP[/] {file_item.name} (video file)")
                 with lock:
                     metrics["skipped_files"] += 1
-                    skipped_files_list.append((str(file_item), ".mov file"))
+                    skipped_files_list.append((str(file_item), "video file"))
                 progress.update(task_id, advance=1)
                 return
 
@@ -447,7 +490,7 @@ def import_from_sd(sd_folder, ssd_root, skip_mov=False, verbose=False, max_worke
                 success, sidecar_count, already_exists = move_file_and_sidecars(
                     file_item,
                     dest_folder,
-                    sidecar_exts,
+                    SIDECAR_EXTENSIONS,
                     verbose=verbose,
                     progress=progress,
                     task_id=task_id,
@@ -655,7 +698,7 @@ def import_menu():
         inquirer.Text(
             "ssd_root", message="Path to SSD 'imgs' root?", default="/Volumes/ssd/imgs"
         ),
-        inquirer.Confirm("skip_mov", message="Skip .mov files?", default=True),
+        inquirer.Confirm("skip_mov", message="Skip video files?", default=True),
         inquirer.Confirm("verbose", message="Show detailed output?", default=False),
         inquirer.Text(
             "max_workers", message="How many parallel workers to use?", default="8"
@@ -675,7 +718,7 @@ def rsync_menu():
             "destination", message="Destination folder?", default="/Volumes/hdd/imgs"
         ),
         inquirer.Confirm(
-            "exclude_mov", message="Exclude .mov files from syncing?", default=False
+            "exclude_mov", message="Exclude video files from syncing?", default=False
         ),
         inquirer.Confirm(
             "do_delete",
