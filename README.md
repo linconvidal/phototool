@@ -10,6 +10,7 @@ A command-line tool for efficient photography workflow management. Organizes pho
 - **Drive sync**: Rsync integration for reliable syncing between drives
 - **Parallel processing**: Multi-threaded file operations for faster imports
 - **Duplicate detection**: Skips identical files to prevent duplicates
+- **Edited versions support**: Recognizes and copies edited versions of photos with naming patterns like basename-1.jpg, basename-HDR.heic, etc.
 
 ## Installation
 
@@ -67,6 +68,7 @@ Copies and organizes photos from SD card to your SSD:
 - Automatically sorts into YYYY.MM folders based on EXIF data
 - Detects and copies sidecar files
 - Checks for duplicates to avoid copying the same file twice
+- Handles edited versions with different naming patterns (e.g., DSF7942-1.JPG, DSF7942-HDR.HEIC)
 
 ### Sync drives (rsync)
 
@@ -75,6 +77,40 @@ Synchronizes your photo library between drives:
 - Fast, efficient rsync-based sync
 - Option to exclude MOV files
 - Optional deletion of files no longer in source
+
+## Testing
+
+The project includes a test suite built with pytest to ensure reliability.
+
+### Running Tests
+
+Install pytest first:
+
+```bash
+# Using uv
+uv pip install pytest
+
+# Using pip
+pip install pytest
+```
+
+Run the tests:
+
+```bash
+python -m pytest test_myphotoscript.py -v
+```
+
+### Test Coverage
+
+The tests cover key functionalities:
+
+- **Edited versions handling**: Verifies that variations of a file (DSF7942.RAF → DSF7942-1.JPG, DSF7942-HDR.HEIC) are properly detected and copied
+- **Duplicate detection**: Ensures identical files aren't copied twice
+- **Error handling**: Validates proper error responses during file operations
+
+### Adding Tests
+
+When adding new features, please extend the test suite with appropriate test cases.
 
 ## License
 

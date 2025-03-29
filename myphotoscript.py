@@ -198,6 +198,7 @@ def move_file_and_sidecars(
 ):
     """
     Copy the main file plus any sidecar files that share the same base name.
+    Also copies edited versions that follow patterns like basename-1.jpg, basename-HDR.heic, etc.
     Returns tuple: (success, copied_sidecars_count, already_exists)
     """
     if sidecar_exts is None:
@@ -245,28 +246,46 @@ def move_file_and_sidecars(
     all_files_in_parent = list(src_parent.glob("*"))
     base_name_lower = base_name.lower()
 
+    # Pattern matching for edited versions with suffixes
+    edited_versions_patterns = [
+        f"{base_name}-*.*",  # For patterns like DSF7942-1.JPG, DSF7942-HDR.HEIC
+        f"{base_name}_*.*",  # For patterns like DSF7942_1.JPG
+        f"{base_name} *.*",  # For patterns like "DSF7942 edited.JPG"
+        f"{base_name}(*)*.*",  # For patterns like DSF7942(1).JPG
+    ]
+
+    # First copy standard sidecars and same-stem photos
     for file_path in all_files_in_parent:
         if not file_path.is_file():
             continue
 
-        # Check if this is a sidecar for our main file
+        # Check if this is a sidecar for our main file or a same-stem photo
         if file_path.stem.lower() == base_name_lower and file_path != src_file:
             extension = file_path.suffix.lower()
-            if extension in [ext.lower() for ext in sidecar_exts]:
+
+            # Handle both sidecars and same-stem photos (e.g., RAW + JPG pairs from camera)
+            is_sidecar = extension in [ext.lower() for ext in sidecar_exts]
+            is_photo = extension in [ext.lower() for ext in PHOTO_EXTENSIONS]
+            is_video = extension in [ext.lower() for ext in VIDEO_EXTENSIONS]
+
+            if is_sidecar or is_photo or is_video:
                 # Skip if we've already copied this file (normalized path)
                 norm_path = str(file_path).lower()
                 if norm_path in copied_sidecar_paths:
                     continue
 
-                # Check if sidecar already exists with same content
-                sidecar_dest_path = dest_folder / file_path.name
-                if sidecar_dest_path.exists() and files_are_identical(
-                    file_path, sidecar_dest_path
-                ):
+                # Check if file already exists with same content
+                dest_path = dest_folder / file_path.name
+                if dest_path.exists() and files_are_identical(file_path, dest_path):
                     if verbose:
-                        console.print(
-                            f"  [yellow]SKIP[/] Sidecar {file_path.name} (identical file already exists)"
-                        )
+                        if is_sidecar:
+                            console.print(
+                                f"  [yellow]SKIP[/] Sidecar {file_path.name} (identical file already exists)"
+                            )
+                        else:
+                            console.print(
+                                f"  [yellow]SKIP[/] Same-stem photo {file_path.name} (identical file already exists)"
+                            )
                     continue
 
                 try:
@@ -274,19 +293,74 @@ def move_file_and_sidecars(
                     copied_sidecars += 1
                     copied_sidecar_paths.add(norm_path)
                     if verbose:
-                        console.print(f"  [green]Copied[/] sidecar: {file_path.name}")
+                        if is_sidecar:
+                            console.print(
+                                f"  [green]Copied[/] sidecar: {file_path.name}"
+                            )
+                        else:
+                            console.print(
+                                f"  [green]Copied[/] same-stem photo: {file_path.name}"
+                            )
                 except OSError as e:
                     if e.errno == 6:  # Device not configured
                         console.print(
-                            f"  [bold red]ERROR[/] Device disconnected while copying sidecar {file_path.name}"
+                            f"  [bold red]ERROR[/] Device disconnected while copying {file_path.name}"
                         )
                         return False, copied_sidecars, False
                     else:
                         console.print(
-                            f"  [bold red]ERROR[/] Failed to copy sidecar {file_path.name}: {str(e)}"
+                            f"  [bold red]ERROR[/] Failed to copy {file_path.name}: {str(e)}"
                         )
 
-    # Also try direct matching with common patterns
+    # Next, look for edited versions with suffixes
+    for pattern in edited_versions_patterns:
+        for edited_file in src_parent.glob(pattern):
+            if not edited_file.is_file() or edited_file == src_file:
+                continue
+
+            # Skip if we've already copied this file (normalized path)
+            norm_path = str(edited_file).lower()
+            if norm_path in copied_sidecar_paths:
+                continue
+
+            # For edited versions, we want to copy all image and video formats
+            extension = edited_file.suffix.lower()
+            if extension not in [
+                ext.lower() for ext in PHOTO_EXTENSIONS + VIDEO_EXTENSIONS
+            ]:
+                continue
+
+            # Check if edited version already exists with same content
+            edited_dest_path = dest_folder / edited_file.name
+            if edited_dest_path.exists() and files_are_identical(
+                edited_file, edited_dest_path
+            ):
+                if verbose:
+                    console.print(
+                        f"  [yellow]SKIP[/] Edited version {edited_file.name} (identical file already exists)"
+                    )
+                continue
+
+            try:
+                shutil.copy2(str(edited_file), str(dest_folder / edited_file.name))
+                copied_sidecars += 1
+                copied_sidecar_paths.add(norm_path)
+                if verbose:
+                    console.print(
+                        f"  [green]Copied[/] edited version: {edited_file.name}"
+                    )
+            except OSError as e:
+                if e.errno == 6:  # Device not configured
+                    console.print(
+                        f"  [bold red]ERROR[/] Device disconnected while copying edited version {edited_file.name}"
+                    )
+                    return False, copied_sidecars, False
+                else:
+                    console.print(
+                        f"  [bold red]ERROR[/] Failed to copy edited version {edited_file.name}: {str(e)}"
+                    )
+
+    # Also try direct matching with common patterns for standard sidecars
     for ext in sidecar_exts:
         # Try both lower and upper case versions of the extension
         for test_ext in [ext.lower(), ext.upper()]:
@@ -696,7 +770,7 @@ def import_menu():
             default="/Volumes/SDCARD/DCIM",
         ),
         inquirer.Text(
-            "ssd_root", message="Path to SSD 'imgs' root?", default="/Volumes/ssd/imgs"
+            "ssd_root", message="Path to HDD 'imgs' root?", default="/Volumes/hd/imgs"
         ),
         inquirer.Confirm("skip_mov", message="Skip video files?", default=True),
         inquirer.Confirm("verbose", message="Show detailed output?", default=False),
